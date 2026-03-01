@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan("com.daifu.manage.**.mapper")
 @SpringBootApplication
 public class DaifuManageApplication {
-
+   //测试
     public static void main(String[] args) {
         SpringApplication.run(DaifuManageApplication.class, args);
     }
