@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: daifu-manage-backend
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/daifu_manage?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jackson:
+    time-zone: Asia/Shanghai
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  pay:
+    base-url: https://your-domain/pay
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: info
