@@ -13,10 +13,6 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
-app:
-  pay:
-    base-url: https://your-domain/pay
-
 server:
   port: 8080
 

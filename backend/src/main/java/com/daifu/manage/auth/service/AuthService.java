@@ -3,9 +3,9 @@ package com.daifu.manage.auth.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.daifu.manage.auth.dto.LoginRequest;
 import com.daifu.manage.auth.dto.LoginResponse;
-import com.daifu.manage.auth.entity.AdminUser;
-import com.daifu.manage.auth.mapper.AdminUserMapper;
 import com.daifu.manage.common.exception.BizException;
+import com.daifu.manage.user.entity.SysUser;
+import com.daifu.manage.user.mapper.SysUserMapper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -16,28 +16,28 @@ public class AuthService {
 
     private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder();
 
-    private final AdminUserMapper adminUserMapper;
+    private final SysUserMapper sysUserMapper;
 
-    public AuthService(AdminUserMapper adminUserMapper) {
-        this.adminUserMapper = adminUserMapper;
+    public AuthService(SysUserMapper sysUserMapper) {
+        this.sysUserMapper = sysUserMapper;
     }
 
     public LoginResponse login(LoginRequest request) {
-        AdminUser adminUser = adminUserMapper.selectOne(new LambdaQueryWrapper<AdminUser>()
-                .eq(AdminUser::getUsername, request.username())
+        SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getUsername, request.username())
                 .last("limit 1"));
 
-        if (adminUser == null) {
+        if (user == null) {
             throw new BizException("account not found");
         }
-        if (adminUser.getStatus() == null || adminUser.getStatus() != 1) {
+        if (user.getStatus() == null || user.getStatus() != 1) {
             throw new BizException("account disabled");
         }
-        if (!ENCODER.matches(request.password(), adminUser.getPassword())) {
+        if (!ENCODER.matches(request.password(), user.getPassword())) {
             throw new BizException("invalid password");
         }
 
         String token = UUID.randomUUID().toString().replace("-", "");
-        return new LoginResponse(token, 7200L);
+        return new LoginResponse(token, 7200L, user.getId(), user.getUsername(), user.getRole());
     }
 }

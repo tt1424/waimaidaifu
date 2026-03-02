@@ -40,7 +40,7 @@ const handleLogin = async () => {
     const data = await loginApi(form);
     authStore.setToken(data.token);
     ElMessage.success("登录成功");
-    router.push("/dashboard");
+    router.push("/users");
   } catch {
     // message handled by interceptor/mock throw
   } finally {

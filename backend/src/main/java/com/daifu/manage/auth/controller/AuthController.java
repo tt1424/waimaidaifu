@@ -3,7 +3,7 @@ package com.daifu.manage.auth.controller;
 import com.daifu.manage.auth.dto.LoginRequest;
 import com.daifu.manage.auth.dto.LoginResponse;
 import com.daifu.manage.auth.service.AuthService;
-import com.daifu.manage.common.api.ApiResponse;
+import com.daifu.manage.common.api.Result;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,7 +21,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ApiResponse.ok(authService.login(request));
+    public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        return Result.ok(authService.login(request));
     }
 }

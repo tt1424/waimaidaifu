@@ -1,12 +1,13 @@
-﻿import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 
 const LoginView = () => import("../views/LoginView.vue");
 const LayoutView = () => import("../views/LayoutView.vue");
-const DashboardView = () => import("../views/DashboardView.vue");
-const StaffView = () => import("../views/StaffView.vue");
+const UserView = () => import("../views/UserView.vue");
+const StoreView = () => import("../views/StoreView.vue");
 const ProductView = () => import("../views/ProductView.vue");
-const OrderView = () => import("../views/OrderView.vue");
+const CartView = () => import("../views/CartView.vue");
+const StatsView = () => import("../views/StatsView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
@@ -16,11 +17,12 @@ const router = createRouter({
       path: "/",
       component: LayoutView,
       children: [
-        { path: "", redirect: "/dashboard" },
-        { path: "/dashboard", component: DashboardView },
-        { path: "/staff", component: StaffView },
+        { path: "", redirect: "/users" },
+        { path: "/users", component: UserView },
+        { path: "/stores", component: StoreView },
         { path: "/products", component: ProductView },
-        { path: "/orders", component: OrderView }
+        { path: "/cart", component: CartView },
+        { path: "/stats", component: StatsView }
       ]
     }
   ]
@@ -32,7 +34,7 @@ router.beforeEach((to) => {
     return "/login";
   }
   if (to.path === "/login" && authStore.token) {
-    return "/dashboard";
+    return "/users";
   }
   return true;
 });

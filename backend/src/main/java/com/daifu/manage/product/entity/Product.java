@@ -15,9 +15,15 @@ public class Product {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long storeId;
+
     private String name;
 
     private BigDecimal price;
+
+    private Integer stock;
+
+    private String description;
 
     private Integer status;
 

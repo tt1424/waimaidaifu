@@ -1,4 +1,4 @@
-# Daifu Manage Backend
+# Manage Backend
 
 ## Prerequisites
 
@@ -33,5 +33,14 @@ http://localhost:8080/swagger-ui.html
 - password hash is provided in SQL initialization script
 
 Replace it with your own secure password before production.
+
+## Core modules
+
+- Auth: `/api/auth/login`
+- Users: `/api/users`
+- Stores: `/api/stores`
+- Products: `/api/products`
+- Cart: `/api/carts`
+- Stats: `/api/stats`
 
 
