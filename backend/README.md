@@ -43,4 +43,19 @@ Replace it with your own secure password before production.
 - Cart: `/api/carts`
 - Stats: `/api/stats`
 
+## Test data
+
+Run the seed script after creating tables:
+
+```sql
+SOURCE backend/src/main/resources/db/test_data.sql;
+```
+
+Demo accounts (password `123456`):
+
+- `admin` (from init SQL)
+- `demo_admin`
+- `demo_user_1`
+- `demo_user_2`
+
 

@@ -42,7 +42,7 @@ const handleLogin = async () => {
     ElMessage.success("登录成功");
     router.push("/users");
   } catch {
-    // message handled by interceptor/mock throw
+    // message handled by interceptor
   } finally {
     loading.value = false;
   }

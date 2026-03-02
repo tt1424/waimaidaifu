@@ -2,21 +2,38 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f5f7fa;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #1f2937;
+  background: linear-gradient(180deg, #f5f7fb 0%, #f2f5fa 100%);
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+.el-card {
+  border-radius: 14px;
+  border: 1px solid #ebeef5;
 }
 
-.card {
-  background: #fff;
-  padding: 16px;
-  border-radius: 8px;
+.el-button {
+  min-width: 72px;
+}
+
+.el-main {
+  padding: 20px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }

@@ -70,6 +70,6 @@ CREATE TABLE IF NOT EXISTS user_stats_daily (
 );
 
 INSERT INTO sys_user (username, password, phone, role, status)
-VALUES ('admin', '$2a$10$2Af67rA9uJDoUdPErnv9xOxNQw6.aYc8vW0V8Qk2S3r8k70Qn2V8e', '13800000000', 1, 1)
+VALUES ('admin', '$2a$10$i0W00y9YVOlw6dFOvaU8nOFeo8P7VItG0Ilyd24fmu8JCU7YTiPg.', '13800000000', 1, 1)
 ON DUPLICATE KEY UPDATE update_time = CURRENT_TIMESTAMP;
 

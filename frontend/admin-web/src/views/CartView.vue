@@ -1,50 +1,89 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h3>购物车</h3>
+  <section class="page-wrap">
+    <div class="page-top">
       <div>
-        <el-select v-model="selectedUserId" placeholder="选择用户" style="width: 220px; margin-right: 8px">
-          <el-option v-for="u in userOptions" :key="u.id" :label="`${u.username} (${u.phone || '-'})`" :value="u.id" />
-        </el-select>
-        <el-select v-model="addForm.productId" placeholder="选择商品" style="width: 220px; margin-right: 8px">
-          <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}（库存:${p.stock}）`" :value="p.id" />
-        </el-select>
-        <el-input-number v-model="addForm.quantity" :min="1" style="margin-right: 8px" />
-        <el-button type="primary" @click="addItem">加入购物车</el-button>
+        <h2 class="page-title">购物车管理</h2>
+        <p class="page-desc">按用户查看购物车商品，支持数量调整和删除。</p>
       </div>
     </div>
 
-    <el-table :data="items" border>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="productName" label="商品名称" min-width="180" />
-      <el-table-column prop="unitPrice" label="单价" width="100" />
-      <el-table-column label="数量" width="160">
-        <template #default="scope">
-          <el-input-number :model-value="scope.row.quantity" :min="1" @change="(v) => updateQty(scope.row, v)" />
-        </template>
-      </el-table-column>
-      <el-table-column prop="totalAmount" label="金额" width="120" />
-      <el-table-column prop="updateTime" label="更新时间" min-width="180" />
-      <el-table-column label="操作" width="100">
-        <template #default="scope">
-          <el-button link type="danger" @click="removeItem(scope.row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <el-card class="block-card" shadow="hover">
+      <el-form :inline="true" class="filter-form">
+        <el-form-item label="用户">
+          <el-select v-model="selectedUserId" placeholder="请选择用户" style="width: 230px" filterable>
+            <el-option v-for="u in userOptions" :key="u.id" :label="`${u.username} (${u.phone || '-'})`" :value="u.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="商品">
+          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 240px" filterable>
+            <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}（库存:${p.stock}）`" :value="p.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="数量">
+          <el-input-number v-model="addForm.quantity" :min="1" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="addItem">加入购物车</el-button>
+          <el-button @click="loadCart">刷新</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
 
-    <div class="summary">
-      <el-card>
-        购物车商品数：{{ summary.itemCount || 0 }}，
-        总数量：{{ summary.totalQuantity || 0 }}，
-        总金额：{{ summary.totalAmount || 0 }}
-      </el-card>
-    </div>
-  </div>
+    <el-card class="block-card" shadow="hover">
+      <div v-loading="loading">
+        <el-empty v-if="!items.length && !loading" description="暂无购物车数据" />
+        <template v-else>
+          <el-table :data="items" border row-class-name="table-row">
+            <el-table-column prop="id" label="ID" width="80" align="center" />
+            <el-table-column prop="productName" label="商品名称" min-width="180" />
+            <el-table-column prop="unitPrice" label="单价" width="120" align="right">
+              <template #default="{ row }">￥{{ row.unitPrice }}</template>
+            </el-table-column>
+            <el-table-column label="数量" width="170" align="center">
+              <template #default="{ row }">
+                <el-input-number :model-value="row.quantity" :min="1" @change="(v) => updateQty(row, v)" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="totalAmount" label="金额" width="130" align="right">
+              <template #default="{ row }">￥{{ row.totalAmount }}</template>
+            </el-table-column>
+            <el-table-column prop="updateTime" label="更新时间" min-width="170" />
+            <el-table-column label="操作" width="120" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-popconfirm title="确认删除该购物车商品吗？" @confirm="removeItem(row)">
+                  <template #reference>
+                    <el-button link type="danger">删除</el-button>
+                  </template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </div>
+    </el-card>
+
+    <el-card class="block-card summary-card" shadow="hover">
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="summary-label">商品项数</span>
+          <span class="summary-value">{{ summary.itemCount || 0 }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">总数量</span>
+          <span class="summary-value">{{ summary.totalQuantity || 0 }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">总金额</span>
+          <span class="summary-value">￥{{ summary.totalAmount || 0 }}</span>
+        </div>
+      </div>
+    </el-card>
+  </section>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { addCartItemApi, deleteCartItemApi, listCartByUserApi, updateCartItemApi } from "../api/cart";
 import { allProductsApi } from "../api/product";
 import { listUsersApi } from "../api/user";
@@ -55,6 +94,7 @@ const selectedUserId = ref(null);
 const addForm = reactive({ productId: null, quantity: 1 });
 
 const items = ref([]);
+const loading = ref(false);
 const summary = reactive({ itemCount: 0, totalQuantity: 0, totalAmount: 0 });
 
 const loadUsers = async () => {
@@ -78,9 +118,14 @@ const loadCart = async () => {
     Object.assign(summary, { itemCount: 0, totalQuantity: 0, totalAmount: 0 });
     return;
   }
-  const res = await listCartByUserApi({ userId: selectedUserId.value });
-  items.value = res.items || [];
-  Object.assign(summary, res.summary || { itemCount: 0, totalQuantity: 0, totalAmount: 0 });
+  loading.value = true;
+  try {
+    const res = await listCartByUserApi({ userId: selectedUserId.value });
+    items.value = res.items || [];
+    Object.assign(summary, res.summary || { itemCount: 0, totalQuantity: 0, totalAmount: 0 });
+  } finally {
+    loading.value = false;
+  }
 };
 
 const addItem = async () => {
@@ -104,7 +149,6 @@ const updateQty = async (row, value) => {
 };
 
 const removeItem = async (row) => {
-  await ElMessageBox.confirm("确认删除该购物车商品吗？", "提示", { type: "warning" });
   await deleteCartItemApi(row.id);
   await loadCart();
   ElMessage.success("删除成功");
@@ -120,7 +164,74 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.summary {
-  margin-top: 12px;
+.page-wrap {
+  display: grid;
+  gap: 16px;
+}
+
+.page-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 30px;
+}
+
+.page-desc {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.block-card {
+  border-radius: 14px;
+}
+
+.filter-form {
+  margin-bottom: -18px;
+}
+
+:deep(.table-row) {
+  height: 50px;
+}
+
+.summary-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f5f8ff;
+}
+
+.summary-label {
+  display: block;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.summary-value {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
