@@ -13,6 +13,18 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
+app:
+  wechat:
+    app-id: ""
+    mch-id: ""
+    mch-serial-no: ""
+    private-key-pem: ""
+    platform-public-key-pem: ""
+    api-v3-key: ""
+    notify-url: ""
+    gateway: https://api.mch.weixin.qq.com
+    order-expire-minutes: 30
+
 server:
   port: 8080
 

@@ -1,0 +1,1 @@
+import{h as u}from"./http-B99lp1Lz.js";async function p(t){return u.get("/api/products",{params:t})}async function s(t){return u.get("/api/products/all",{params:t})}async function c(t){return u.post("/api/products",t)}async function n(t,a){return u.put(`/api/products/${t}`,a)}async function o(t,a){return u.put(`/api/products/${t}/status`,a)}export{n as a,s as b,c,p as l,o as u};
