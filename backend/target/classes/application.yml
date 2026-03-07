@@ -15,6 +15,7 @@ mybatis-plus:
 
 app:
   wechat:
+    mode: mock
     app-id: ""
     mch-id: ""
     mch-serial-no: ""

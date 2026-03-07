@@ -1,0 +1,1 @@
+import{h as t}from"./http-CFFKX-fB.js";async function s(a){return t.post("/api/pay/checkout",a)}async function e(a){return t.post("/api/pay/wechat/jsapi",a)}async function p(a){return t.get(`/api/pay/orders/${a}`)}async function r(a){return t.post(`/api/pay/orders/${a}/mock/success`)}export{e as a,s as c,p as g,r as m};

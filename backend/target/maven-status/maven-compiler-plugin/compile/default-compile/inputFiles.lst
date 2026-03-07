@@ -60,6 +60,7 @@ E:\代付管理系统\backend\src\main\java\com\daifu\manage\cart\vo\CartItemVO.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\cart\service\CartService.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\store\vo\StoreVO.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\product\mapper\ProductMapper.java
+E:\代付管理系统\backend\src\main\java\com\daifu\manage\payment\vo\PaymentOrderItemVO.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\product\controller\ProductController.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\payment\entity\PaymentOrderItem.java
 E:\代付管理系统\backend\src\main\java\com\daifu\manage\auth\dto\LoginResponse.java
