@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.wechat")
 public class WechatPayProperties {
 
+    private String mode = "mock";
     private String appId;
     private String mchId;
     private String mchSerialNo;
@@ -16,6 +17,14 @@ public class WechatPayProperties {
     private String notifyUrl;
     private String gateway = "https://api.mch.weixin.qq.com";
     private Integer orderExpireMinutes = 30;
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
 
     public String getAppId() {
         return appId;

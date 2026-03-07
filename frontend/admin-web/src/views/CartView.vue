@@ -2,10 +2,10 @@
   <section class="page-wrap">
     <div class="page-top">
       <div>
-        <h2 class="page-title">购物车管理</h2>
-        <p class="page-desc">支持按用户维护购物车，并可选中一条或多条发起微信支付。</p>
+        <h2 class="page-title">购物车与结算</h2>
+        <p class="page-desc">在后台维护用户购物车，生成订单后交给公开收银台完成支付。</p>
       </div>
-      <el-button type="success" :loading="paying" @click="paySelected">微信支付</el-button>
+      <el-button type="primary" :loading="creatingOrder" @click="createOrderFromSelection">创建订单</el-button>
     </div>
 
     <el-card class="block-card" shadow="hover">
@@ -15,12 +15,14 @@
             <el-option v-for="u in userOptions" :key="u.id" :label="`${u.username} (${u.phone || '-'})`" :value="u.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="OpenID">
-          <el-input v-model="payForm.openid" placeholder="微信用户 OpenID" style="width: 280px" />
-        </el-form-item>
         <el-form-item label="商品">
-          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 220px" filterable>
-            <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}（库存:${p.stock}）`" :value="p.id" />
+          <el-select v-model="addForm.productId" placeholder="请选择商品" style="width: 240px" filterable>
+            <el-option
+              v-for="p in productOptions"
+              :key="p.id"
+              :label="`${p.name}（库存 ${p.stock}）`"
+              :value="p.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="数量">
@@ -36,10 +38,11 @@
     <el-card class="block-card" shadow="hover">
       <template #header>
         <div class="order-head">
-          <span>最近支付订单</span>
+          <span>最近创建的订单</span>
           <el-space v-if="latestOrderNo">
-            <el-input :model-value="latestOrderNo" readonly style="width: 280px" />
-            <el-button @click="refreshOrderStatus">查单</el-button>
+            <el-button @click="refreshOrderStatus">刷新状态</el-button>
+            <el-button type="primary" plain @click="openCashier">打开收银台</el-button>
+            <el-button plain @click="copyCashierLink">复制链接</el-button>
           </el-space>
           <span v-else class="order-empty">暂无</span>
         </div>
@@ -50,7 +53,9 @@
         <el-descriptions-item label="状态">
           <el-tag :type="statusTagType(latestOrderStatus)">{{ statusText(latestOrderStatus) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="预支付ID">{{ latestPrepayId || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="收银台链接">
+          <span class="cashier-path">{{ latestCashierPath ? buildCashierUrl(latestCashierPath) : "-" }}</span>
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -76,7 +81,7 @@
             <el-table-column prop="updateTime" label="更新时间" min-width="170" />
             <el-table-column label="操作" width="120" align="center" fixed="right">
               <template #default="{ row }">
-                <el-popconfirm title="确认删除该购物车商品吗？" @confirm="removeItem(row)">
+                <el-popconfirm title="确认删除这条购物车商品吗？" @confirm="removeItem(row)">
                   <template #reference>
                     <el-button link type="danger">删除</el-button>
                   </template>
@@ -113,30 +118,27 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { addCartItemApi, deleteCartItemApi, listCartByUserApi, updateCartItemApi } from "../api/cart";
+import { createCheckoutApi, getPayOrderApi } from "../api/pay";
 import { allProductsApi } from "../api/product";
-import { createCheckoutApi, createWechatJsapiPayApi, getPayOrderApi } from "../api/pay";
 import { listUsersApi } from "../api/user";
-
-const OPENID_KEY = "wechat_openid_cache_by_user_v1";
 
 const userOptions = ref([]);
 const productOptions = ref([]);
 const selectedUserId = ref(null);
 const addForm = reactive({ productId: null, quantity: 1 });
-const payForm = reactive({ openid: "" });
 const selectedRows = ref([]);
 
 const items = ref([]);
 const loading = ref(false);
-const paying = ref(false);
+const creatingOrder = ref(false);
 const summary = reactive({ itemCount: 0, totalQuantity: 0, totalAmount: 0 });
 
 const latestOrderNo = ref("");
 const latestOrderAmount = ref("");
 const latestOrderStatus = ref(null);
-const latestPrepayId = ref("");
+const latestCashierPath = ref("");
 
 const selectedAmount = computed(() =>
   (selectedRows.value || [])
@@ -144,19 +146,7 @@ const selectedAmount = computed(() =>
     .toFixed(2)
 );
 
-const getOpenidCache = () => {
-  try {
-    return JSON.parse(localStorage.getItem(OPENID_KEY) || "{}");
-  } catch {
-    return {};
-  }
-};
-
-const setOpenidCache = (userId, openid) => {
-  const cache = getOpenidCache();
-  cache[String(userId)] = openid;
-  localStorage.setItem(OPENID_KEY, JSON.stringify(cache));
-};
+const buildCashierUrl = (path) => (path ? `${window.location.origin}${path}` : "");
 
 const loadUsers = async () => {
   const res = await listUsersApi({ pageNum: 1, pageSize: 999, role: 2, status: 1 });
@@ -179,6 +169,7 @@ const loadCart = async () => {
     Object.assign(summary, { itemCount: 0, totalQuantity: 0, totalAmount: 0 });
     return;
   }
+
   loading.value = true;
   try {
     const res = await listCartByUserApi({ userId: selectedUserId.value });
@@ -239,129 +230,63 @@ const refreshOrderStatus = async () => {
   if (!latestOrderNo.value) return;
   const order = await getPayOrderApi(latestOrderNo.value);
   latestOrderStatus.value = Number(order.status);
-  latestPrepayId.value = order.prepayId || latestPrepayId.value;
+  latestCashierPath.value = order.cashierPath || latestCashierPath.value;
   if (latestOrderStatus.value === 1) {
     await loadCart();
   }
 };
 
-const paySelected = async () => {
+const createOrderFromSelection = async () => {
   if (!selectedUserId.value) {
     ElMessage.warning("请先选择用户");
     return;
   }
   if (!selectedRows.value.length) {
-    ElMessage.warning("请先勾选要支付的购物车数据");
-    return;
-  }
-  if (!payForm.openid.trim()) {
-    ElMessage.warning("请输入微信 OpenID");
+    ElMessage.warning("请先勾选要结算的购物车商品");
     return;
   }
 
-  await ElMessageBox.confirm(
-    `确认发起支付？\n选中条数：${selectedRows.value.length}\n支付金额：￥${selectedAmount.value}`,
-    "确认支付",
-    { type: "warning" }
-  );
-
-  paying.value = true;
+  creatingOrder.value = true;
   try {
     const checkout = await createCheckoutApi({
       userId: selectedUserId.value,
-      cartItemIds: selectedRows.value.map((x) => x.id),
-      openid: payForm.openid.trim()
+      cartItemIds: selectedRows.value.map((row) => row.id)
     });
-
     latestOrderNo.value = checkout.orderNo;
     latestOrderAmount.value = checkout.totalAmount;
     latestOrderStatus.value = Number(checkout.status);
-    latestPrepayId.value = "";
-    setOpenidCache(selectedUserId.value, payForm.openid.trim());
-
-    const jsapi = await createWechatJsapiPayApi({ orderNo: checkout.orderNo });
-    latestPrepayId.value = jsapi.prepayId || "";
-
-    const inWechat = /MicroMessenger/i.test(window.navigator.userAgent || "");
-    if (!inWechat) {
-      await ElMessageBox.alert(
-        `当前不是微信环境，请在微信内打开后支付。\n订单号：${checkout.orderNo}`,
-        "提示",
-        { type: "warning" }
-      );
-      return;
-    }
-
-    const payOk = await invokeWechatPay(jsapi);
-    if (!payOk) return;
-
-    const paid = await waitPaySuccess(checkout.orderNo);
-    if (paid) {
-      ElMessage.success("支付成功");
-      await refreshOrderStatus();
-    } else {
-      ElMessage.warning("支付结果确认超时，请稍后点击“查单”");
-    }
-  } catch (error) {
-    ElMessage.error(error?.message || "支付发起失败");
+    latestCashierPath.value = checkout.cashierPath || "";
+    ElMessage.success("订单已创建，请在收银台完成支付");
+    openCashier();
   } finally {
-    paying.value = false;
+    creatingOrder.value = false;
   }
 };
 
-const invokeWechatPay = (jsapi) => {
-  return new Promise((resolve, reject) => {
-    const invoke = () => {
-      window.WeixinJSBridge.invoke(
-        "getBrandWCPayRequest",
-        {
-          appId: jsapi.appId,
-          timeStamp: jsapi.timeStamp,
-          nonceStr: jsapi.nonceStr,
-          package: jsapi.packageValue,
-          signType: jsapi.signType,
-          paySign: jsapi.paySign
-        },
-        (res) => {
-          const msg = (res?.err_msg || "").toLowerCase();
-          if (msg.includes("ok")) {
-            resolve(true);
-            return;
-          }
-          if (msg.includes("cancel")) {
-            ElMessage.info("已取消支付");
-            resolve(false);
-            return;
-          }
-          reject(new Error(res?.err_msg || "wechat pay failed"));
-        }
-      );
-    };
-
-    if (typeof window.WeixinJSBridge === "undefined") {
-      document.addEventListener("WeixinJSBridgeReady", invoke, { once: true });
-    } else {
-      invoke();
-    }
-  });
-};
-
-const waitPaySuccess = async (orderNo) => {
-  const maxRetry = 10;
-  for (let i = 0; i < maxRetry; i += 1) {
-    const order = await getPayOrderApi(orderNo);
-    if (Number(order.status) === 1) {
-      latestOrderStatus.value = 1;
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+const openCashier = () => {
+  if (!latestCashierPath.value) {
+    ElMessage.warning("当前没有可用的收银台链接");
+    return;
   }
-  return false;
+  window.open(buildCashierUrl(latestCashierPath.value), "_blank", "noopener,noreferrer");
 };
 
-watch(selectedUserId, (userId) => {
-  const cache = getOpenidCache();
-  payForm.openid = cache[String(userId)] || "";
+const copyCashierLink = async () => {
+  if (!latestCashierPath.value) {
+    ElMessage.warning("当前没有可用的收银台链接");
+    return;
+  }
+
+  const url = buildCashierUrl(latestCashierPath.value);
+  try {
+    await navigator.clipboard.writeText(url);
+    ElMessage.success("收银台链接已复制");
+  } catch {
+    ElMessage.warning(`请手动复制：${url}`);
+  }
+};
+
+watch(selectedUserId, () => {
   loadCart();
 });
 
@@ -412,9 +337,16 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.order-empty {
+.order-empty,
+.cashier-path {
   color: #9ca3af;
   font-size: 13px;
+}
+
+.cashier-path {
+  display: inline-block;
+  max-width: 320px;
+  word-break: break-all;
 }
 
 :deep(.table-row) {
@@ -461,6 +393,12 @@ onMounted(async () => {
 }
 
 @media (max-width: 760px) {
+  .page-top,
+  .order-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
   }

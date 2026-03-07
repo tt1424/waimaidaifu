@@ -7,6 +7,7 @@ public record CheckoutCreateVO(
         String orderNo,
         BigDecimal totalAmount,
         Integer status,
-        LocalDateTime expireTime
+        LocalDateTime expireTime,
+        String cashierPath
 ) {
 }

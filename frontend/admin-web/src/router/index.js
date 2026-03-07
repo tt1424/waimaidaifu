@@ -8,11 +8,13 @@ const StoreView = () => import("../views/StoreView.vue");
 const ProductView = () => import("../views/ProductView.vue");
 const CartView = () => import("../views/CartView.vue");
 const StatsView = () => import("../views/StatsView.vue");
+const CashierView = () => import("../views/CashierView.vue");
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", component: LoginView },
+    { path: "/cashier/:orderNo", component: CashierView, meta: { public: true } },
     {
       path: "/",
       component: LayoutView,
@@ -30,6 +32,9 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const authStore = useAuthStore();
+  if (to.meta.public) {
+    return true;
+  }
   if (to.path !== "/login" && !authStore.token) {
     return "/login";
   }

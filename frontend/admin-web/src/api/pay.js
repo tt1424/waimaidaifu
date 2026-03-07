@@ -11,3 +11,7 @@ export async function createWechatJsapiPayApi(data) {
 export async function getPayOrderApi(orderNo) {
   return http.get(`/api/pay/orders/${orderNo}`);
 }
+
+export async function mockPaySuccessApi(orderNo) {
+  return http.post(`/api/pay/orders/${orderNo}/mock/success`);
+}

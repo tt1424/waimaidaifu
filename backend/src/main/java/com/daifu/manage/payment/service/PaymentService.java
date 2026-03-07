@@ -14,6 +14,7 @@ import com.daifu.manage.payment.mapper.PaymentNotifyLogMapper;
 import com.daifu.manage.payment.mapper.PaymentOrderItemMapper;
 import com.daifu.manage.payment.mapper.PaymentOrderMapper;
 import com.daifu.manage.payment.vo.CheckoutCreateVO;
+import com.daifu.manage.payment.vo.PaymentOrderItemVO;
 import com.daifu.manage.payment.vo.PaymentOrderVO;
 import com.daifu.manage.payment.vo.WechatJsapiPayVO;
 import com.daifu.manage.product.entity.Product;
@@ -29,8 +30,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +45,10 @@ public class PaymentService {
     private static final int STATUS_PAID = 1;
     private static final int STATUS_CLOSED = 2;
     private static final int STATUS_FAILED = 3;
+
+    private static final String CHANNEL_CASHIER = "CASHIER";
+    private static final String CHANNEL_WECHAT_JSAPI = "WECHAT_JSAPI";
+    private static final String CHANNEL_MOCK_JSAPI = "MOCK_JSAPI";
 
     private final PaymentOrderMapper paymentOrderMapper;
     private final PaymentOrderItemMapper paymentOrderItemMapper;
@@ -81,9 +84,6 @@ public class PaymentService {
     public CheckoutCreateVO createCheckout(CheckoutCreateRequest request) {
         if (!userService.existsEnabledUser(request.userId())) {
             throw new BizException("user not found or disabled");
-        }
-        if (!StringUtils.hasText(request.openid())) {
-            throw new BizException("openid is required");
         }
 
         List<Long> selectedIds = request.cartItemIds().stream()
@@ -125,10 +125,10 @@ public class PaymentService {
         PaymentOrder order = new PaymentOrder();
         order.setOrderNo(orderNo);
         order.setUserId(request.userId());
-        order.setOpenid(request.openid().trim());
+        order.setOpenid(trimToNull(request.openid()));
         order.setTotalAmount(totalAmount);
         order.setStatus(STATUS_UNPAID);
-        order.setChannel("WECHAT_JSAPI");
+        order.setChannel(CHANNEL_CASHIER);
         order.setExpireTime(expireTime);
         paymentOrderMapper.insert(order);
 
@@ -145,28 +145,23 @@ public class PaymentService {
             paymentOrderItemMapper.insert(item);
         }
 
-        return new CheckoutCreateVO(orderNo, totalAmount, STATUS_UNPAID, expireTime);
+        return new CheckoutCreateVO(orderNo, totalAmount, STATUS_UNPAID, expireTime, buildCashierPath(orderNo));
     }
 
     @Transactional(rollbackFor = Exception.class)
     public WechatJsapiPayVO wechatJsapiPay(WechatJsapiPayRequest request) {
         PaymentOrder order = findOrderByNo(request.orderNo());
-        if (order.getStatus() != null && order.getStatus() == STATUS_PAID) {
-            throw new BizException("order already paid");
-        }
-        if (order.getStatus() != null && order.getStatus() == STATUS_CLOSED) {
-            throw new BizException("order already closed");
-        }
-        if (order.getExpireTime() != null && LocalDateTime.now().isAfter(order.getExpireTime())) {
-            order.setStatus(STATUS_CLOSED);
-            paymentOrderMapper.updateById(order);
-            throw new BizException("order expired");
-        }
-        if (!StringUtils.hasText(order.getOpenid())) {
-            throw new BizException("order openid is empty");
+        closeExpiredIfNeeded(order);
+        assertPayable(order);
+
+        String openid = resolveOpenid(order);
+        if (isMockMode()) {
+            return buildMockJsapiPay(order, openid);
         }
 
-        String prepayId = wechatPayClient.unifiedOrderJsapi(order.getOrderNo(), order.getTotalAmount(), order.getOpenid());
+        order.setOpenid(openid);
+        String prepayId = wechatPayClient.unifiedOrderJsapi(order.getOrderNo(), order.getTotalAmount(), openid);
+        order.setChannel(CHANNEL_WECHAT_JSAPI);
         order.setPrepayId(prepayId);
         paymentOrderMapper.updateById(order);
         return wechatPayClient.buildJsapiPayParams(order.getOrderNo(), prepayId);
@@ -174,25 +169,45 @@ public class PaymentService {
 
     public PaymentOrderVO getOrder(String orderNo) {
         PaymentOrder order = findOrderByNo(orderNo);
+        closeExpiredIfNeeded(order);
         return toVO(order);
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public void simulatePaySuccess(String orderNo) {
+        if (!isMockMode()) {
+            throw new BizException("mock pay is disabled in real mode");
+        }
+        PaymentOrder order = findOrderByNo(orderNo);
+        closeExpiredIfNeeded(order);
+        assertPayable(order);
+        markOrderPaid(orderNo, "MOCK-" + UUID.randomUUID().toString().replace("-", ""), LocalDateTime.now());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public boolean handleWechatNotify(String body, Map<String, String> headers) {
-        String timestamp = header(headers, "Wechatpay-Timestamp");
-        String nonce = header(headers, "Wechatpay-Nonce");
-        String signature = header(headers, "Wechatpay-Signature");
+        if (isMockMode()) {
+            return false;
+        }
 
         JsonNode root = readJson(body);
         String notifyId = root.path("id").asText("");
+        if (StringUtils.hasText(notifyId) && notifyExists(notifyId)) {
+            return true;
+        }
+
+        String timestamp = header(headers, "Wechatpay-Timestamp");
+        String nonce = header(headers, "Wechatpay-Nonce");
+        String signature = header(headers, "Wechatpay-Signature");
         String eventType = root.path("event_type").asText("");
 
         boolean verified = wechatPayClient.verifySignature(timestamp, nonce, body, signature);
         PaymentNotifyLog notifyLog = new PaymentNotifyLog();
-        notifyLog.setNotifyId(notifyId);
-        notifyLog.setEventType(eventType);
+        notifyLog.setNotifyId(trimToNull(notifyId));
+        notifyLog.setEventType(trimToNull(eventType));
         notifyLog.setVerifyStatus(verified ? 1 : 0);
         notifyLog.setRawData(body);
+        notifyLog.setOrderNo("");
 
         if (!verified) {
             paymentNotifyLogMapper.insert(notifyLog);
@@ -211,6 +226,9 @@ public class PaymentService {
         String tradeState = payNode.path("trade_state").asText("");
         String successTime = payNode.path("success_time").asText("");
 
+        PaymentOrder order = findOrderByNo(orderNo);
+        validateNotifyPayload(order, payNode);
+
         notifyLog.setOrderNo(orderNo);
         paymentNotifyLogMapper.insert(notifyLog);
 
@@ -225,14 +243,20 @@ public class PaymentService {
 
     @Transactional(rollbackFor = Exception.class)
     protected void markOrderPaid(String orderNo, String transactionId, LocalDateTime payTime) {
-        PaymentOrder order = paymentOrderMapper.selectOne(new LambdaQueryWrapper<PaymentOrder>()
-                .eq(PaymentOrder::getOrderNo, orderNo)
-                .last("limit 1"));
+        PaymentOrder order = paymentOrderMapper.selectByOrderNoForUpdate(orderNo);
+        if (order == null) {
+            order = paymentOrderMapper.selectOne(new LambdaQueryWrapper<PaymentOrder>()
+                    .eq(PaymentOrder::getOrderNo, orderNo)
+                    .last("limit 1"));
+        }
         if (order == null) {
             return;
         }
-        if (order.getStatus() != null && order.getStatus() == STATUS_PAID) {
+        if (Objects.equals(order.getStatus(), STATUS_PAID)) {
             return;
+        }
+        if (Objects.equals(order.getStatus(), STATUS_CLOSED)) {
+            throw new BizException("order already closed");
         }
 
         List<PaymentOrderItem> items = paymentOrderItemMapper.selectList(new LambdaQueryWrapper<PaymentOrderItem>()
@@ -281,6 +305,19 @@ public class PaymentService {
     }
 
     private PaymentOrderVO toVO(PaymentOrder order) {
+        List<PaymentOrderItemVO> items = paymentOrderItemMapper.selectList(new LambdaQueryWrapper<PaymentOrderItem>()
+                        .eq(PaymentOrderItem::getOrderId, order.getId())
+                        .orderByAsc(PaymentOrderItem::getId))
+                .stream()
+                .map(item -> new PaymentOrderItemVO(
+                        item.getProductId(),
+                        item.getProductName(),
+                        item.getPrice(),
+                        item.getQuantity(),
+                        item.getSubTotal()
+                ))
+                .toList();
+
         return new PaymentOrderVO(
                 order.getOrderNo(),
                 order.getUserId(),
@@ -289,8 +326,101 @@ public class PaymentService {
                 order.getPrepayId(),
                 order.getWechatTransactionId(),
                 order.getExpireTime(),
-                order.getPayTime()
+                order.getPayTime(),
+                buildCashierPath(order.getOrderNo()),
+                items,
+                isMockMode()
         );
+    }
+
+    private void validateNotifyPayload(PaymentOrder order, JsonNode payNode) {
+        int expectedFen = order.getTotalAmount()
+                .multiply(BigDecimal.valueOf(100))
+                .intValue();
+        int actualFen = payNode.path("amount").path("total").asInt(-1);
+        if (actualFen != expectedFen) {
+            throw new BizException("wechat notify amount mismatch");
+        }
+
+        String appId = payNode.path("appid").asText("");
+        if (StringUtils.hasText(wechatPayProperties.getAppId()) && StringUtils.hasText(appId)
+                && !Objects.equals(wechatPayProperties.getAppId(), appId)) {
+            throw new BizException("wechat notify appid mismatch");
+        }
+
+        String mchId = payNode.path("mchid").asText("");
+        if (StringUtils.hasText(wechatPayProperties.getMchId()) && StringUtils.hasText(mchId)
+                && !Objects.equals(wechatPayProperties.getMchId(), mchId)) {
+            throw new BizException("wechat notify mchid mismatch");
+        }
+    }
+
+    private void closeExpiredIfNeeded(PaymentOrder order) {
+        if (!Objects.equals(order.getStatus(), STATUS_UNPAID)) {
+            return;
+        }
+        if (order.getExpireTime() != null && LocalDateTime.now().isAfter(order.getExpireTime())) {
+            order.setStatus(STATUS_CLOSED);
+            paymentOrderMapper.updateById(order);
+        }
+    }
+
+    private void assertPayable(PaymentOrder order) {
+        if (Objects.equals(order.getStatus(), STATUS_PAID)) {
+            throw new BizException("order already paid");
+        }
+        if (Objects.equals(order.getStatus(), STATUS_CLOSED)) {
+            throw new BizException("order already closed");
+        }
+    }
+
+    private String resolveOpenid(PaymentOrder order) {
+        String openid = trimToNull(order.getOpenid());
+        if (StringUtils.hasText(openid)) {
+            return openid;
+        }
+        if (isMockMode()) {
+            return "mock-openid-" + order.getUserId() + "-" + order.getOrderNo().substring(Math.max(0, order.getOrderNo().length() - 6));
+        }
+        throw new BizException("order openid is empty");
+    }
+
+    private WechatJsapiPayVO buildMockJsapiPay(PaymentOrder order, String openid) {
+        String prepayId = "mock_prepay_" + UUID.randomUUID().toString().replace("-", "");
+        String appId = StringUtils.hasText(wechatPayProperties.getAppId()) ? wechatPayProperties.getAppId() : "mock-app";
+        String timeStamp = String.valueOf(System.currentTimeMillis() / 1000);
+        String nonceStr = UUID.randomUUID().toString().replace("-", "");
+        String packageValue = "prepay_id=" + prepayId;
+
+        order.setOpenid(openid);
+        order.setChannel(CHANNEL_MOCK_JSAPI);
+        order.setPrepayId(prepayId);
+        paymentOrderMapper.updateById(order);
+
+        return new WechatJsapiPayVO(
+                order.getOrderNo(),
+                appId,
+                timeStamp,
+                nonceStr,
+                packageValue,
+                "RSA",
+                "mock-sign",
+                prepayId
+        );
+    }
+
+    private boolean notifyExists(String notifyId) {
+        Long count = paymentNotifyLogMapper.selectCount(new LambdaQueryWrapper<PaymentNotifyLog>()
+                .eq(PaymentNotifyLog::getNotifyId, notifyId));
+        return count != null && count > 0;
+    }
+
+    private boolean isMockMode() {
+        return !"real".equalsIgnoreCase(trimToNull(wechatPayProperties.getMode()));
+    }
+
+    private String buildCashierPath(String orderNo) {
+        return "/cashier/" + orderNo;
     }
 
     private LocalDateTime parsePayTime(String text) {
@@ -319,5 +449,12 @@ public class PaymentService {
         } catch (Exception ex) {
             throw new BizException("invalid json: " + ex.getMessage());
         }
+    }
+
+    private String trimToNull(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        return text.trim();
     }
 }

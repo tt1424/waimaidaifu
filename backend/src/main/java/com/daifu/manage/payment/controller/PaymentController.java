@@ -45,6 +45,12 @@ public class PaymentController {
         return Result.ok(paymentService.getOrder(orderNo));
     }
 
+    @PostMapping("/orders/{orderNo}/mock/success")
+    public Result<Void> mockSuccess(@PathVariable String orderNo) {
+        paymentService.simulatePaySuccess(orderNo);
+        return Result.ok();
+    }
+
     @PostMapping("/wechat/notify")
     public ResponseEntity<Map<String, String>> notify(@RequestBody String body,
                                                        @RequestHeader Map<String, String> headers) {
